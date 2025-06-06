@@ -628,6 +628,26 @@
             z-index: 1000;
         }
 
+        .export-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .data-info {
+            background: #e8f4fd;
+            border: 1px solid #bee5eb;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            color: #0c5460;
+        }
+
+        .data-info-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
         @media (max-width: 768px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -761,6 +781,34 @@
                     </div>
                 </div>
 
+                <!-- Export Section -->
+                <div class="analytics-section">
+                    <h3 style="margin-bottom: 15px; color: #2c3e50;">📤 Export & Data</h3>
+                    
+                    <!-- Data Status Info -->
+                    <div class="data-info">
+                        <div class="data-info-title">💾 Data Storage Status</div>
+                        <div id="dataStatus">Checking...</div>
+                        <div style="margin-top: 8px;">
+                            <button class="btn-small btn-execute" onclick="testLocalStorage()" style="margin-right: 5px;">
+                                Test Storage
+                            </button>
+                            <button class="btn-small btn-execute" onclick="forceReload()">
+                                Reload Data
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="export-buttons">
+                        <button class="btn btn-add" onclick="exportToExcel()" style="width: 100%; margin-bottom: 10px;">
+                            📊 Export to Excel
+                        </button>
+                        <button class="btn btn-subtract" onclick="clearAllData()" style="width: 100%;">
+                            🗑️ Clear All Data
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Time Period Analytics -->
                 <div class="analytics-section">
                     <h3 style="margin-bottom: 15px; color: #2c3e50;">📊 Period Analysis</h3>
@@ -821,21 +869,53 @@
         </div>
     </div>
 
+    <!-- SheetJS for Excel export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
     <script>
-        // Note: Using in-memory storage for the artifact. 
-        // For GitHub deployment, replace this section with localStorage implementation.
-        let data = {
-            categories: {
-                'Cash': 0,
-                'House': 0,
-                'Local Travel': 0,
-                'Food': 0,
-                'Shopping': 0,
-                'Miscellaneous': 0
-            },
-            transactions: [],
-            recurringExpenses: []
-        };
+        // Data storage with localStorage support
+        function loadData() {
+            try {
+                const savedData = localStorage.getItem('expenseTrackerData');
+                if (savedData) {
+                    const parsedData = JSON.parse(savedData);
+                    console.log('Data loaded from localStorage:', parsedData);
+                    return parsedData;
+                }
+                console.log('No saved data found, using defaults');
+            } catch (error) {
+                console.error('Error loading data from localStorage:', error);
+                showNotification('Error loading saved data. Starting fresh.', 'error');
+            }
+            
+            return {
+                categories: {
+                    'Cash': 0,
+                    'House': 0,
+                    'Local Travel': 0,
+                    'Food': 0,
+                    'Shopping': 0,
+                    'Miscellaneous': 0
+                },
+                transactions: [],
+                recurringExpenses: []
+            };
+        }
+
+        function saveData() {
+            try {
+                localStorage.setItem('expenseTrackerData', JSON.stringify(data));
+                console.log('Data saved to localStorage:', data);
+                return true;
+            } catch (error) {
+                console.error('Error saving data to localStorage:', error);
+                showNotification('Error saving data. Please check your browser settings.', 'error');
+                return false;
+            }
+        }
+
+        // Initialize data
+        let data = loadData();
 
         // Category icons
         const categoryIcons = {
@@ -850,6 +930,11 @@
         let currentPeriod = 'week';
 
         function initializeApp() {
+            console.log('Initializing app...');
+            
+            // Check localStorage availability
+            checkDataStorageStatus();
+            
             renderCategories();
             populateCategorySelect();
             populateRecurringCategorySelect();
@@ -857,6 +942,72 @@
             updateDetailedAnalytics();
             renderRecurringExpenses();
             processRecurringExpenses();
+            renderTransactionHistory();
+            
+            console.log('App initialized with data:', data);
+        }
+
+        function checkDataStorageStatus() {
+            const statusElement = document.getElementById('dataStatus');
+            
+            if (typeof(Storage) !== "undefined") {
+                // localStorage is available
+                const hasData = data.transactions.length > 0 || data.recurringExpenses.length > 0 || 
+                                Object.values(data.categories).some(val => val !== 0);
+                
+                if (hasData) {
+                    statusElement.innerHTML = `✅ Storage working - ${data.transactions.length} transactions, ${data.recurringExpenses.length} recurring expenses`;
+                    statusElement.style.color = '#155724';
+                } else {
+                    statusElement.innerHTML = '✅ Storage available - No data yet';
+                    statusElement.style.color = '#856404';
+                }
+            } else {
+                statusElement.innerHTML = '❌ localStorage not supported in this browser';
+                statusElement.style.color = '#721c24';
+            }
+        }
+
+        function testLocalStorage() {
+            try {
+                // Test write
+                const testData = { test: 'localStorage working', timestamp: Date.now() };
+                localStorage.setItem('storageTest', JSON.stringify(testData));
+                
+                // Test read
+                const retrieved = JSON.parse(localStorage.getItem('storageTest'));
+                
+                // Clean up
+                localStorage.removeItem('storageTest');
+                
+                if (retrieved && retrieved.test === 'localStorage working') {
+                    showNotification('✅ localStorage is working perfectly!');
+                    console.log('localStorage test passed');
+                } else {
+                    throw new Error('Data mismatch');
+                }
+            } catch (error) {
+                console.error('localStorage test failed:', error);
+                showNotification('❌ localStorage test failed: ' + error.message, 'error');
+            }
+            
+            checkDataStorageStatus();
+        }
+
+        function forceReload() {
+            console.log('Force reloading data...');
+            data = loadData();
+            
+            // Refresh all UI components
+            renderCategories();
+            populateCategorySelect();
+            populateRecurringCategorySelect();
+            updateDetailedAnalytics();
+            renderRecurringExpenses();
+            renderTransactionHistory();
+            checkDataStorageStatus();
+            
+            showNotification('Data reloaded from storage');
         }
 
         function renderCategories() {
@@ -943,6 +1094,11 @@
                 data.transactions = data.transactions.slice(0, 50);
             }
 
+            // Save data to localStorage
+            if (saveData()) {
+                showNotification(`Transaction added: ${multiplier > 0 ? '+' : ''}${formatCurrency(finalAmount)} to ${category}`);
+            }
+
             // Clear form
             document.getElementById('amountInput').value = '';
             document.getElementById('reasonInput').value = '';
@@ -951,6 +1107,7 @@
             renderCategories();
             updateDetailedAnalytics();
             renderTransactionHistory();
+            checkDataStorageStatus();
         }
 
         function addRecurringExpense() {
@@ -988,13 +1145,18 @@
 
             data.recurringExpenses.push(recurringExpense);
 
+            // Save data to localStorage
+            if (saveData()) {
+                showNotification(`Recurring expense "${reason}" added successfully!`);
+            }
+
             // Clear form
             document.getElementById('recurringAmountInput').value = '';
             document.getElementById('recurringReasonInput').value = '';
             setDefaultStartDate();
 
-            showNotification(`Recurring expense "${reason}" added successfully!`);
             renderRecurringExpenses();
+            checkDataStorageStatus();
         }
 
         function calculateNextDue(startDate, frequency) {
@@ -1063,8 +1225,11 @@
             expense.lastExecuted = new Date().toISOString().split('T')[0];
             expense.nextDue = calculateNextDue(expense.lastExecuted, expense.frequency);
 
-            if (showConfirmation) {
-                showNotification(`Recurring expense "${expense.reason}" executed: -${formatCurrency(expense.amount)}`);
+            // Save data to localStorage
+            if (saveData()) {
+                if (showConfirmation) {
+                    showNotification(`Recurring expense "${expense.reason}" executed: -${formatCurrency(expense.amount)}`);
+                }
             }
 
             // Update UI
@@ -1072,13 +1237,132 @@
             updateDetailedAnalytics();
             renderTransactionHistory();
             renderRecurringExpenses();
+            checkDataStorageStatus();
         }
 
         function deleteRecurringExpense(expenseId) {
             if (confirm('Are you sure you want to delete this recurring expense?')) {
                 data.recurringExpenses = data.recurringExpenses.filter(e => e.id !== expenseId);
+                
+                if (saveData()) {
+                    showNotification('Recurring expense deleted');
+                }
+                
                 renderRecurringExpenses();
-                showNotification('Recurring expense deleted');
+                checkDataStorageStatus();
+            }
+        }
+
+        function exportToExcel() {
+            try {
+                // Create workbook
+                const wb = XLSX.utils.book_new();
+                
+                // Transactions sheet
+                const transactionsData = data.transactions.map(t => ({
+                    'Date': t.date,
+                    'Time': t.time,
+                    'Category': t.category,
+                    'Amount': t.amount,
+                    'Reason': t.reason,
+                    'Type': t.amount > 0 ? 'Income' : 'Expense'
+                }));
+                
+                const transactionsSheet = XLSX.utils.json_to_sheet(transactionsData);
+                XLSX.utils.book_append_sheet(wb, transactionsSheet, 'Transactions');
+                
+                // Categories sheet
+                const categoriesData = Object.entries(data.categories).map(([category, balance]) => ({
+                    'Category': category,
+                    'Current Balance': balance,
+                    'Icon': categoryIcons[category]
+                }));
+                
+                const categoriesSheet = XLSX.utils.json_to_sheet(categoriesData);
+                XLSX.utils.book_append_sheet(wb, categoriesSheet, 'Categories');
+                
+                // Recurring expenses sheet
+                const recurringData = data.recurringExpenses.map(e => ({
+                    'Category': e.category,
+                    'Amount': e.amount,
+                    'Description': e.reason,
+                    'Frequency': e.frequency,
+                    'Start Date': e.startDate,
+                    'Next Due': e.nextDue,
+                    'Last Executed': e.lastExecuted || 'Never'
+                }));
+                
+                const recurringSheet = XLSX.utils.json_to_sheet(recurringData);
+                XLSX.utils.book_append_sheet(wb, recurringSheet, 'Recurring Expenses');
+                
+                // Analytics summary sheet
+                const totalBalance = Object.values(data.categories).reduce((sum, val) => sum + val, 0);
+                const totalIncome = data.transactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+                const totalExpenses = Math.abs(data.transactions.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0));
+                
+                const analyticsData = [
+                    { 'Metric': 'Total Balance', 'Value': totalBalance },
+                    { 'Metric': 'Total Income', 'Value': totalIncome },
+                    { 'Metric': 'Total Expenses', 'Value': totalExpenses },
+                    { 'Metric': 'Net Change', 'Value': totalIncome - totalExpenses },
+                    { 'Metric': 'Total Transactions', 'Value': data.transactions.length },
+                    { 'Metric': 'Active Recurring Expenses', 'Value': data.recurringExpenses.length },
+                    { 'Metric': 'Export Date', 'Value': new Date().toLocaleDateString() }
+                ];
+                
+                const analyticsSheet = XLSX.utils.json_to_sheet(analyticsData);
+                XLSX.utils.book_append_sheet(wb, analyticsSheet, 'Analytics Summary');
+                
+                // Generate filename with current date
+                const today = new Date();
+                const filename = `expense_tracker_${today.getFullYear()}-${(today.getMonth()+1).toString().padStart(2,'0')}-${today.getDate().toString().padStart(2,'0')}.xlsx`;
+                
+                // Save file
+                XLSX.writeFile(wb, filename);
+                
+                showNotification(`Data exported successfully to ${filename}!`);
+                
+            } catch (error) {
+                console.error('Export error:', error);
+                showNotification('Error exporting data. Please try again.', 'error');
+            }
+        }
+
+        function clearAllData() {
+            const confirmation = confirm('⚠️ WARNING: This will permanently delete ALL your data including transactions, categories, and recurring expenses. This action cannot be undone.\n\nType "DELETE" in the next prompt to confirm.');
+            
+            if (confirmation) {
+                const finalConfirmation = prompt('Please type "DELETE" to confirm you want to permanently delete all data:');
+                
+                if (finalConfirmation === 'DELETE') {
+                    // Reset data to initial state
+                    data = {
+                        categories: {
+                            'Cash': 0,
+                            'House': 0,
+                            'Local Travel': 0,
+                            'Food': 0,
+                            'Shopping': 0,
+                            'Miscellaneous': 0
+                        },
+                        transactions: [],
+                        recurringExpenses: []
+                    };
+                    
+                    // Clear localStorage
+                    localStorage.removeItem('expenseTrackerData');
+                    
+                    // Refresh UI
+                    renderCategories();
+                    updateDetailedAnalytics();
+                    renderTransactionHistory();
+                    renderRecurringExpenses();
+                    checkDataStorageStatus();
+                    
+                    showNotification('All data has been permanently deleted.', 'error');
+                } else {
+                    showNotification('Data deletion cancelled - incorrect confirmation text.');
+                }
             }
         }
 
